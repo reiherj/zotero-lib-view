@@ -3,8 +3,8 @@
 A Zotero plugin that renders your library as a grid of item covers instead of a
 list of rows.
 
-> **Status: scaffold.** The build, the profile linking and the dev loop all
-> work. The grid itself does not exist yet — see [Status](#status).
+Covers are rendered from the first page of each item's PDF attachment, so a
+library of books looks like a shelf rather than a list of titles.
 
 ## Requirements
 
@@ -67,13 +67,16 @@ Override the defaults if your setup differs:
 addon/            Static assets copied to build/, with __placeholders__ substituted
   manifest.json
   prefs.js        Default preference values
+  pdf-bridge.mjs  Loads Zotero's pdf.js into a window (see Covers)
   preferences.xhtml
   style.css
   locale/en-US/lib-view.ftl
 src/
   bootstrap.ts    Zotero's entry points — transpiled, never bundled
   index.ts        Bundle entry; assigns the global bootstrap declares
-  lib-view.ts     Plugin logic
+  lib-view.ts     Plugin lifecycle, windows, toggle state
+  grid/grid-view.ts  The grid overlay for one window
+  grid/covers.ts     Cover resolution and caching
   dev-reload.ts   Dev-only reload endpoint, compiled out of release builds
   preferences.ts  Preference pane script — transpiled, never bundled
   globals.d.ts    Build-time constants and shared types
@@ -158,11 +161,70 @@ false. If it throws in between, the plugin is left disabled and stays that way
 across restarts. The handler catches that and calls `addon.enable()`, but if it
 ever does get stuck, re-enable it in Tools → Add-ons.
 
+## How the grid works
+
+The toggle lives next to the quick search in the items toolbar, and is mirrored
+by a *Grid View* item in the View menu. Both write
+`extensions.lib-view.gridEnabled`, which is read back on startup, so the choice
+survives restarts. The line view is the default.
+
+### It overlays the tree, it does not replace it
+
+`#lib-view-grid` is absolutely positioned over `#zotero-items-pane`. The item
+tree stays in the DOM underneath, laid out and updating. That is deliberate:
+Zotero keeps owning sorting, filtering, the quick search and the selection
+model, and the grid only mirrors `itemsView.getSortedItems()`.
+
+It also solves change detection without touching Zotero internals. A
+MutationObserver on `#zotero-items-tree` fires whenever Zotero re-renders its
+rows — a different collection, a new search, a re-sort, an added item — so the
+grid refreshes off Zotero's own work. Nothing is monkey-patched, and there is
+nothing to restore on shutdown.
+
+Clicking a tile calls `itemsView.selectItem()` so the item pane follows;
+double-clicking calls `ZoteroPane.viewItems()`. Tiles render in chunks of 120
+with an IntersectionObserver sentinel pulling in more on scroll, so a large
+library does not build thousands of nodes up front.
+
+### Covers
+
+`src/grid/covers.ts` tries providers in order and takes the first hit:
+
+1. the item is itself an image attachment;
+2. an image attached to the item — a cover the user saved;
+3. the first page of a PDF attachment, rendered with pdf.js.
+
+Anything with no hit gets a placeholder: the title's first character on a hue
+derived from that title, so tiles stay distinguishable and stable across
+re-sorts. Adding a source (a lookup by ISBN, say) means adding one function to
+`PROVIDERS`.
+
+Rendered pages are cached as JPEGs under `<data directory>/lib-view/covers/`,
+keyed by item id — roughly 30KB each, and far too slow to redo on every scroll
+or restart. The cache is dropped only when an *attachment* changes; invalidating
+on every item change would throw covers away when you add a tag.
+
+Two things about pdf.js are worth knowing before touching that code. Zotero
+already ships it, so the plugin borrows it instead of bundling a copy — but it
+is the **browser** build, and it reads `window` and `navigator` at import time.
+`ChromeUtils.importESModule()` into the plugin sandbox therefore throws
+`ReferenceError: navigator is not defined`. `addon/pdf-bridge.mjs` is injected
+into the Zotero window as a module script instead, where those globals exist,
+and hands the module back on `window["lib-view_pdfjs"]`. And `getDocument()` has
+to be given bytes rather than a URL, because pdf.js resolves a URL against
+`window.location`, which the calling scope does not have.
+
 ### Preferences
 
-Defaults live in `addon/prefs.js` under the `extensions.lib-view` prefix and are
-read with `Zotero.Prefs.get("extensions.lib-view.columns", true)` — the trailing
-`true` means "this is a full pref name, don't prepend `extensions.zotero.`".
+Defaults live in `addon/prefs.js` under the `extensions.lib-view` prefix:
+`gridEnabled` (false) and `tileWidth` (150px, exposed in the plugin's
+preference pane). They are read with
+`Zotero.Prefs.get("extensions.lib-view.tileWidth", true)` — the trailing `true`
+means "this is a full pref name, don't prepend `extensions.zotero.`".
+
+`gridEnabled` is cached in memory on startup rather than re-read per use: a dev
+reload clears and re-applies the plugin's default prefs, so two reads moments
+apart can disagree.
 
 ## Gotchas
 
@@ -190,24 +252,20 @@ always passes `-purgecaches`. It also passes `-ZoteroDebugText` and `-jsconsole`
 **`prefs.js` edits get reverted.** Zotero rewrites the file on exit. Close it
 first.
 
+**Editing `scripts/` seems to do nothing.** The watcher only watches `src/` and
+`addon/`. Changes to the build tooling need `npm run dev` restarted.
+
 Note that `strict_max_version` is currently `9.*` and `update_url` points at
 `https://reiher.dev/zotero-lib-view/updates.json`, which does not exist yet. A
 404 is harmless during development, but both need attention before release.
 
-## Status
+## Roadmap
 
-`LibViewPlugin.addToWindow()` still carries the placeholder decoration inherited
-from Zotero's `make-it-red` sample — red item rows plus a *Make It Green
-Instead* toggle in the View menu. It is deliberately still there: it is a
-one-glance check that the stylesheet, the Fluent locale and the menu wiring all
-reach the main window. Replace it when the grid lands.
-
-### Roadmap
-
-- **Decide where the grid mounts.** Zotero 7's item tree is a virtualized React
-  list and won't become a grid through CSS. Either a new pane beside the item
-  tree, or swapping the items pane contents behind a mode toggle.
-- **Cover sources.** Zotero has no cover field. Options are rendering page 1 of
-  a PDF attachment, or fetching by ISBN/DOI (Open Library, Google Books), plus a
-  cache. This will shape the design more than the rendering will.
+- **Keyboard navigation.** The grid has none: arrow keys still go to the item
+  tree underneath. Selection, click and double-click work.
+- **More cover sources.** A lookup by ISBN/DOI (Open Library, Google Books)
+  would cover items whose PDF first page is a title page rather than a jacket,
+  and items with no attachment at all.
+- **Cache housekeeping.** Nothing evicts `<data directory>/lib-view/covers/`
+  when items are deleted.
 - **Packaging.** An XPI zip script and a real `updates.json`.

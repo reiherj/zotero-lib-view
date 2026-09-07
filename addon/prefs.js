@@ -1,2 +1,2 @@
-pref("__prefsPrefix__.columns", 6);
-pref("__prefsPrefix__.enabled", true);
+pref("__prefsPrefix__.gridEnabled", false);
+pref("__prefsPrefix__.tileWidth", 150);

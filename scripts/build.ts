@@ -3,7 +3,7 @@ import { cpSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFi
 import { join, relative } from "node:path";
 import { addonDir, buildDir, defines, srcDir, substitutions } from "./config.ts";
 
-const TEXT_EXTENSIONS = new Set([".json", ".js", ".xhtml", ".css", ".ftl", ".dtd", ".properties"]);
+const TEXT_EXTENSIONS = new Set([".json", ".js", ".mjs", ".xhtml", ".css", ".ftl", ".dtd", ".properties"]);
 
 /** Copy addon/ into build/, substituting __placeholders__ in text files. */
 function copyStaticAssets(dir: string) {

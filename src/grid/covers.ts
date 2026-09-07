@@ -1,0 +1,231 @@
+/**
+ * Cover resolution.
+ *
+ * Zotero has no cover field, so a cover has to be derived from what the item
+ * already carries. Providers are tried in order; the first hit wins and an item
+ * with no hit gets a generated placeholder. Adding a source (a remote lookup by
+ * ISBN, say) means adding one function to `PROVIDERS`.
+ *
+ * Results are cached in memory and, for rendered PDF pages, on disk under the
+ * Zotero data directory — rendering a page is far too slow to repeat on every
+ * scroll, let alone every restart.
+ */
+const IMAGE_CONTENT_TYPES = new Set([
+	"image/jpeg",
+	"image/png",
+	"image/gif",
+	"image/webp",
+	"image/avif",
+	"image/tiff",
+]);
+
+const PDF_RENDER_WIDTH = 400;
+const PDF_JPEG_QUALITY = 0.82;
+
+export interface CoverContext {
+	/** A window is needed for its canvas and for pdf.js; the sandbox has no DOM. */
+	window: Window;
+	rootURI: string;
+}
+
+/** Resolved covers, keyed by item id. `null` means "checked, nothing found". */
+const cache = new Map<number, string | null>();
+
+function cacheDir(): string {
+	return PathUtils.join((Zotero as any).DataDirectory.dir, __ADDON_REF__, "covers");
+}
+
+function cachePath(itemID: number): string {
+	return PathUtils.join(cacheDir(), `${itemID}.jpg`);
+}
+
+function attachmentsOf(item: any): any[] {
+	return Zotero.Items.get(item.getAttachments()) as unknown as any[];
+}
+
+async function fileURLIfImage(attachment: any): Promise<string | null> {
+	if (!IMAGE_CONTENT_TYPES.has(attachment.attachmentContentType)) return null;
+	const path = await attachment.getFilePathAsync();
+	return path ? PathUtils.toFileURI(path) : null;
+}
+
+/** The item is itself an image attachment. */
+async function ownFile(item: any): Promise<string | null> {
+	return item.isAttachment() ? fileURLIfImage(item) : null;
+}
+
+/** An image attached to the item — a cover the user saved themselves. */
+async function attachedImage(item: any): Promise<string | null> {
+	if (!item.isRegularItem()) return null;
+	for (const attachment of attachmentsOf(item)) {
+		const url = await fileURLIfImage(attachment);
+		if (url) return url;
+	}
+	return null;
+}
+
+const PDFJS_GLOBAL = `${__ADDON_REF__}_pdfjs`;
+const pdfjsPromises = new WeakMap<Window, Promise<any>>();
+
+/**
+ * pdf.js is Zotero's own copy, loaded into the window by addon/pdf-bridge.mjs.
+ * It cannot be imported into the plugin sandbox: the browser build reads
+ * `window` and `navigator` at import time and neither exists there.
+ */
+function loadPdfjs(context: CoverContext): Promise<any> {
+	const window = context.window as any;
+	if (window[PDFJS_GLOBAL]) return Promise.resolve(window[PDFJS_GLOBAL]);
+
+	let promise = pdfjsPromises.get(context.window);
+	if (promise) return promise;
+
+	promise = new Promise((resolve, reject) => {
+		const timer = window.setTimeout(
+			() => reject(new Error("pdf.js bridge timed out")),
+			15000,
+		);
+		window.addEventListener(
+			`${__ADDON_REF__}:pdfjs-ready`,
+			() => {
+				window.clearTimeout(timer);
+				resolve(window[PDFJS_GLOBAL]);
+			},
+			{ once: true },
+		);
+		// createElementNS, not createElement: the Zotero pane is a XUL document,
+		// where createElement("script") makes an inert XUL element.
+		const script = window.document.createElementNS(
+			"http://www.w3.org/1999/xhtml",
+			"script",
+		) as HTMLScriptElement;
+		script.type = "module";
+		script.src = `${context.rootURI}pdf-bridge.mjs?v=${Date.now()}`;
+		script.addEventListener("error", () => reject(new Error("pdf.js bridge failed to load")));
+		window.document.documentElement.appendChild(script);
+	});
+	pdfjsPromises.set(context.window, promise);
+	return promise;
+}
+
+async function readDiskCache(itemID: number): Promise<string | null> {
+	try {
+		const bytes = await IOUtils.read(cachePath(itemID));
+		let binary = "";
+		for (const byte of bytes) binary += String.fromCharCode(byte);
+		return `data:image/jpeg;base64,${btoa(binary)}`;
+	} catch {
+		return null;
+	}
+}
+
+async function writeDiskCache(itemID: number, dataURL: string) {
+	try {
+		await IOUtils.makeDirectory(cacheDir(), { createAncestors: true });
+		const base64 = dataURL.slice(dataURL.indexOf(",") + 1);
+		const binary = atob(base64);
+		const bytes = new Uint8Array(binary.length);
+		for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+		await IOUtils.write(cachePath(itemID), bytes);
+	} catch (e) {
+		Zotero.logError(e as Error);
+	}
+}
+
+/** First page of the item's PDF attachment, rendered to a JPEG data URL. */
+async function pdfFirstPage(item: any, context: CoverContext): Promise<string | null> {
+	if (!item.isRegularItem()) return null;
+
+	const cached = await readDiskCache(item.id);
+	if (cached) return cached;
+
+	const attachment = attachmentsOf(item).find(
+		(a) => a.attachmentContentType === "application/pdf",
+	);
+	if (!attachment) return null;
+	const path = await attachment.getFilePathAsync();
+	if (!path) return null;
+
+	const pdfjs = await loadPdfjs(context);
+	// Bytes, not a url: pdf.js resolves a url against `window.location`, and the
+	// module is imported into a system scope that has no window.
+	const document = await pdfjs.getDocument({ data: await IOUtils.read(path) }).promise;
+	try {
+		const page = await document.getPage(1);
+		const unscaled = page.getViewport({ scale: 1 });
+		const viewport = page.getViewport({
+			scale: PDF_RENDER_WIDTH / unscaled.width,
+		});
+
+		const canvas = context.window.document.createElementNS(
+			"http://www.w3.org/1999/xhtml",
+			"canvas",
+		) as HTMLCanvasElement;
+		canvas.width = viewport.width;
+		canvas.height = viewport.height;
+		await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
+
+		const dataURL = canvas.toDataURL("image/jpeg", PDF_JPEG_QUALITY);
+		await writeDiskCache(item.id, dataURL);
+		return dataURL;
+	} finally {
+		document.destroy();
+	}
+}
+
+const PROVIDERS = [ownFile, attachedImage, pdfFirstPage];
+
+export async function resolveCover(
+	item: any,
+	context: CoverContext,
+): Promise<string | null> {
+	if (cache.has(item.id)) return cache.get(item.id)!;
+
+	let url: string | null = null;
+	for (const provider of PROVIDERS) {
+		try {
+			url = await provider(item, context);
+		} catch (e) {
+			Zotero.logError(e as Error);
+			continue;
+		}
+		if (url) break;
+	}
+
+	cache.set(item.id, url);
+	return url;
+}
+
+export function forgetCover(itemID: number) {
+	cache.delete(itemID);
+	IOUtils.remove(cachePath(itemID), { ignoreAbsent: true }).catch(() => {});
+}
+
+/**
+ * Only attachment changes can change an item's cover. Without this filter every
+ * unrelated edit — adding a tag, say — would throw away a rendered cover and
+ * force a re-render of the PDF.
+ */
+export function forgetCoversFor(ids: (number | string)[]) {
+	for (const id of ids) {
+		const item = Zotero.Items.get(Number(id)) as any;
+		if (!item?.isAttachment?.()) continue;
+		forgetCover(item.parentItemID ?? item.id);
+	}
+}
+
+export function clearCovers() {
+	cache.clear();
+}
+
+/**
+ * A stable hue per item, so placeholder tiles are distinguishable and don't
+ * change as the library is re-sorted.
+ */
+export function placeholderHue(item: any): number {
+	const seed = item.getDisplayTitle?.() ?? String(item.id);
+	let hash = 0;
+	for (let i = 0; i < seed.length; i++) {
+		hash = (hash * 31 + seed.charCodeAt(i)) | 0;
+	}
+	return Math.abs(hash) % 360;
+}

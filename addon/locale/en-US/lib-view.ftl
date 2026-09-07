@@ -1,2 +1,3 @@
-lib-view-green-instead =
-    .label = Make It Green Instead
+lib-view-toggle =
+    .label = Grid View
+    .tooltiptext = Toggle grid view
