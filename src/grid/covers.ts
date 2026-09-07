@@ -64,6 +64,52 @@ async function attachedImage(item: any): Promise<string | null> {
 	return null;
 }
 
+const renderDocuments = new WeakMap<Window, Promise<Document>>();
+
+/**
+ * pdf.js appends SVG filter elements to `document.body` when a page uses a soft
+ * mask. The Zotero pane is a XUL document with no body, so rendering there
+ * throws and those covers silently fall back to a placeholder. A hidden
+ * about:blank iframe gives pdf.js a document that has one.
+ */
+function renderDocument(context: CoverContext): Promise<Document> {
+	let promise = renderDocuments.get(context.window);
+	if (promise) return promise;
+
+	promise = new Promise<Document>((resolve, reject) => {
+		const iframe = context.window.document.createElementNS(
+			"http://www.w3.org/1999/xhtml",
+			"iframe",
+		) as HTMLIFrameElement;
+		iframe.id = `${__ADDON_REF__}-render-frame`;
+		iframe.setAttribute("src", "about:blank");
+		iframe.style.cssText =
+			"position:absolute;width:0;height:0;border:0;visibility:hidden";
+
+		const timer = context.window.setTimeout(
+			() => reject(new Error("render frame timed out")),
+			5000,
+		);
+		const ready = () => {
+			const doc = iframe.contentDocument;
+			if (!doc?.body) return false;
+			context.window.clearTimeout(timer);
+			resolve(doc);
+			return true;
+		};
+
+		context.window.document.documentElement.appendChild(iframe);
+		// An about:blank iframe in a XUL document is usable as soon as it is in
+		// the tree and does not reliably fire `load`; waiting on that event alone
+		// hangs forever. Check first, and keep the listener only as a fallback.
+		if (!ready()) {
+			iframe.addEventListener("load", () => ready(), { once: true });
+		}
+	});
+	renderDocuments.set(context.window, promise);
+	return promise;
+}
+
 const PDFJS_GLOBAL = `${__ADDON_REF__}_pdfjs`;
 const pdfjsPromises = new WeakMap<Window, Promise<any>>();
 
@@ -98,6 +144,7 @@ function loadPdfjs(context: CoverContext): Promise<any> {
 			"http://www.w3.org/1999/xhtml",
 			"script",
 		) as HTMLScriptElement;
+		script.id = `${__ADDON_REF__}-pdf-bridge`;
 		script.type = "module";
 		script.src = `${context.rootURI}pdf-bridge.mjs?v=${Date.now()}`;
 		script.addEventListener("error", () => reject(new Error("pdf.js bridge failed to load")));
@@ -146,9 +193,13 @@ async function pdfFirstPage(item: any, context: CoverContext): Promise<string | 
 	if (!path) return null;
 
 	const pdfjs = await loadPdfjs(context);
+	const renderDoc = await renderDocument(context);
 	// Bytes, not a url: pdf.js resolves a url against `window.location`, and the
-	// module is imported into a system scope that has no window.
-	const document = await pdfjs.getDocument({ data: await IOUtils.read(path) }).promise;
+	// module is imported into a scope that has no window.
+	const document = await pdfjs.getDocument({
+		data: await IOUtils.read(path),
+		ownerDocument: renderDoc,
+	}).promise;
 	try {
 		const page = await document.getPage(1);
 		const unscaled = page.getViewport({ scale: 1 });
@@ -156,10 +207,7 @@ async function pdfFirstPage(item: any, context: CoverContext): Promise<string | 
 			scale: PDF_RENDER_WIDTH / unscaled.width,
 		});
 
-		const canvas = context.window.document.createElementNS(
-			"http://www.w3.org/1999/xhtml",
-			"canvas",
-		) as HTMLCanvasElement;
+		const canvas = renderDoc.createElement("canvas") as HTMLCanvasElement;
 		canvas.width = viewport.width;
 		canvas.height = viewport.height;
 		await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
@@ -174,25 +222,50 @@ async function pdfFirstPage(item: any, context: CoverContext): Promise<string | 
 
 const PROVIDERS = [ownFile, attachedImage, pdfFirstPage];
 
-export async function resolveCover(
+/** Resolutions in progress, so the same PDF is never rendered twice at once. */
+const inFlight = new Map<number, Promise<string | null>>();
+
+export function resolveCover(
 	item: any,
 	context: CoverContext,
 ): Promise<string | null> {
-	if (cache.has(item.id)) return cache.get(item.id)!;
+	if (cache.has(item.id)) return Promise.resolve(cache.get(item.id)!);
 
-	let url: string | null = null;
-	for (const provider of PROVIDERS) {
-		try {
-			url = await provider(item, context);
-		} catch (e) {
-			Zotero.logError(e as Error);
-			continue;
+	const existing = inFlight.get(item.id);
+	if (existing) return existing;
+
+	const promise = (async () => {
+		let url: string | null = null;
+		for (const provider of PROVIDERS) {
+			try {
+				url = await provider(item, context);
+			} catch (e) {
+				Zotero.logError(e as Error);
+				continue;
+			}
+			if (url) break;
 		}
-		if (url) break;
-	}
+		cache.set(item.id, url);
+		return url;
+	})().finally(() => inFlight.delete(item.id));
 
-	cache.set(item.id, url);
-	return url;
+	inFlight.set(item.id, promise);
+	return promise;
+}
+
+/** Already-resolved cover, if any, without awaiting. Used to avoid a flash. */
+export function cachedCover(itemID: number): string | null | undefined {
+	return cache.get(itemID);
+}
+
+/** Drop the per-window pdf.js bridge and render frame. */
+export function disposeWindow(window: Window) {
+	renderDocuments.delete(window);
+	pdfjsPromises.delete(window);
+	for (const id of [`${__ADDON_REF__}-render-frame`, `${__ADDON_REF__}-pdf-bridge`]) {
+		window.document.getElementById(id)?.remove();
+	}
+	delete (window as any)[PDFJS_GLOBAL];
 }
 
 export function forgetCover(itemID: number) {

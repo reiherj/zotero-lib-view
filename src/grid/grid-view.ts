@@ -1,4 +1,4 @@
-import { placeholderHue, resolveCover } from "./covers.ts";
+import { cachedCover, disposeWindow, placeholderHue, resolveCover } from "./covers.ts";
 
 const CHUNK_SIZE = 120;
 const REFRESH_DEBOUNCE_MS = 120;
@@ -100,6 +100,7 @@ export class GridView {
 		this.window.clearTimeout(this.refreshTimer);
 		this.grid?.remove();
 		this.toggle?.remove();
+		disposeWindow(this.window);
 		this.pane?.removeAttribute(`data-${__ADDON_REF__}-active`);
 		this.grid = this.toggle = this.observer = this.covers = this.sentinel = null;
 	}
@@ -131,7 +132,21 @@ export class GridView {
 	refresh() {
 		if (!this.enabled || !this.grid) return;
 		const itemsView = (this.window as any).ZoteroPane?.itemsView;
-		this.items = itemsView?.getSortedItems?.() ?? [];
+		const items = itemsView?.getSortedItems?.() ?? [];
+
+		// Rebuilding identical tiles is what makes toggling flicker: the covers
+		// have to be resolved again and repaint a frame later. If the list is
+		// unchanged, keep the DOM and just move the selection.
+		const unchanged =
+			this.rendered > 0 &&
+			items.length === this.items.length &&
+			items.every((item: any, i: number) => item.id === this.items[i]?.id);
+		this.items = items;
+		if (unchanged) {
+			this.syncSelection();
+			return;
+		}
+
 		this.grid.replaceChildren();
 		this.rendered = 0;
 		this.renderChunk();
@@ -169,6 +184,20 @@ export class GridView {
 		}
 	}
 
+	private syncSelection() {
+		const selected = new Set<number>(
+			((this.window as any).ZoteroPane?.getSelectedItems?.() ?? []).map(
+				(item: any) => item.id as number,
+			),
+		);
+		for (const tile of this.grid!.querySelectorAll(`.${__ADDON_REF__}-tile`)) {
+			(tile as HTMLElement).classList.toggle(
+				"selected",
+				selected.has(Number((tile as HTMLElement).dataset.itemId)),
+			);
+		}
+	}
+
 	private buildTile(item: any, selected: Set<number>): HTMLElement {
 		const tile = this.doc.createElement("div");
 		tile.className = `${__ADDON_REF__}-tile`;
@@ -194,7 +223,12 @@ export class GridView {
 		meta.textContent = [creator, year].filter(Boolean).join(" · ");
 		tile.appendChild(meta);
 
-		this.covers?.observe(tile);
+		const known = cachedCover(item.id);
+		if (known) {
+			this.showCover(tile, known, false);
+		} else if (known === undefined) {
+			this.covers?.observe(tile);
+		}
 		return tile;
 	}
 
@@ -207,16 +241,31 @@ export class GridView {
 
 			const item = Zotero.Items.get(Number(tile.dataset.itemId)) as any;
 			if (!item) continue;
-			const url = await resolveCover(item, { window: this.window, rootURI: this.rootURI });
+			const url = await resolveCover(item, {
+				window: this.window,
+				rootURI: this.rootURI,
+			});
 			if (!url || !tile.isConnected) continue;
-
-			const cover = tile.querySelector(`.${__ADDON_REF__}-cover`) as HTMLElement;
-			const image = this.doc.createElement("img");
-			image.src = url;
-			image.alt = "";
-			image.addEventListener("load", () => cover.classList.add("has-image"));
-			cover.appendChild(image);
+			this.showCover(tile, url, true);
 		}
+	}
+
+	/**
+	 * `fade` is false for covers already in memory: they can be marked loaded up
+	 * front so they paint with the tile rather than a frame later.
+	 */
+	private showCover(tile: HTMLElement, url: string, fade: boolean) {
+		const cover = tile.querySelector(`.${__ADDON_REF__}-cover`) as HTMLElement;
+		if (!cover || cover.querySelector("img")) return;
+		const image = this.doc.createElement("img");
+		image.src = url;
+		image.alt = "";
+		if (fade) {
+			image.addEventListener("load", () => cover.classList.add("has-image"));
+		} else {
+			cover.classList.add("has-image");
+		}
+		cover.appendChild(image);
 	}
 
 	private tileFor(event: Event): HTMLElement | null {

@@ -199,6 +199,10 @@ derived from that title, so tiles stay distinguishable and stable across
 re-sorts. Adding a source (a lookup by ISBN, say) means adding one function to
 `PROVIDERS`.
 
+Renders are deduplicated by item id while in flight — two tiles scrolling into
+view together would otherwise render the same PDF twice and race the cache
+write.
+
 Rendered pages are cached as JPEGs under `<data directory>/lib-view/covers/`,
 keyed by item id — roughly 30KB each, and far too slow to redo on every scroll
 or restart. The cache is dropped only when an *attachment* changes; invalidating
@@ -213,6 +217,18 @@ into the Zotero window as a module script instead, where those globals exist,
 and hands the module back on `window["lib-view_pdfjs"]`. And `getDocument()` has
 to be given bytes rather than a URL, because pdf.js resolves a URL against
 `window.location`, which the calling scope does not have.
+
+A third: when a page uses a soft mask, pdf.js appends SVG filter elements to
+`document.body`. The Zotero pane is a XUL document with no body, so those pages
+threw and fell back to placeholders. Rendering happens in a hidden `about:blank`
+iframe, passed to `getDocument()` as `ownerDocument`, which has a real body.
+That iframe is usable as soon as it is in the tree and does not reliably fire
+`load` — waiting on that event alone hangs forever, so the code checks
+`contentDocument` first and keeps a timeout.
+
+The cover slot is a fixed 2:3 box, but the image is only *contained* in it and
+sits on the baseline. Book covers are not all 2:3, and `object-fit: cover` was
+slicing the edges off the wider ones.
 
 ### Preferences
 
