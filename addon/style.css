@@ -1,0 +1,9 @@
+/* Placeholder smoke-test styling: proves the plugin's stylesheet is applied.
+   Replace with the cover-grid styles. */
+.row {
+	color: red;
+}
+
+window[data-lib-view-green] .row {
+	color: green;
+}

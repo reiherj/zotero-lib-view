@@ -1,0 +1,29 @@
+{
+	"name": "zotero-lib-view",
+	"version": "0.0.1",
+	"description": "Renders a grid view of item covers in Zotero",
+	"private": true,
+	"type": "module",
+	"config": {
+		"addonID": "zotero-lib-view@reiher.dev",
+		"addonName": "Library Grid View",
+		"addonRef": "lib-view",
+		"prefsPrefix": "extensions.lib-view"
+	},
+	"scripts": {
+		"build": "tsx scripts/build.ts",
+		"dev": "tsx scripts/dev.ts",
+		"start": "tsx scripts/zotero.ts restart",
+		"stop": "tsx scripts/zotero.ts stop",
+		"link": "tsx scripts/link.ts",
+		"typecheck": "tsc --noEmit",
+		"clean": "rm -rf build"
+	},
+	"devDependencies": {
+		"@types/node": "^26.5.0",
+		"esbuild": "^0.25.0",
+		"tsx": "^4.19.0",
+		"typescript": "^5.7.0",
+		"zotero-types": "^4.0.0"
+	}
+}

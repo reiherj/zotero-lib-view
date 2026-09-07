@@ -1,0 +1,14 @@
+{
+	"manifest_version": 2,
+	"name": "__addonName__",
+	"version": "__addonVersion__",
+	"description": "__addonDescription__",
+	"applications": {
+		"zotero": {
+			"id": "__addonID__",
+			"update_url": "https://reiher.dev/zotero-lib-view/updates.json",
+			"strict_min_version": "7.0",
+			"strict_max_version": "9.*"
+		}
+	}
+}
