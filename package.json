@@ -17,7 +17,8 @@
 		"stop": "tsx scripts/zotero.ts stop",
 		"link": "tsx scripts/link.ts",
 		"typecheck": "tsc --noEmit",
-		"clean": "rm -rf build"
+		"clean": "rm -rf build",
+		"reload": "tsx scripts/reload.ts"
 	},
 	"devDependencies": {
 		"@types/node": "^26.5.0",

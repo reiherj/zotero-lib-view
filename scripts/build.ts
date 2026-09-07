@@ -53,7 +53,7 @@ const scriptOptions: esbuild.BuildOptions[] = [
 	},
 ];
 
-function resolveOutfile(options: esbuild.BuildOptions): esbuild.BuildOptions {
+function resolveOutfile(options: esbuild.BuildOptions, dev: boolean): esbuild.BuildOptions {
 	let outfile = options.outfile!;
 	for (const [key, value] of Object.entries(substitutions)) {
 		outfile = outfile.replaceAll(key, value);
@@ -64,21 +64,24 @@ function resolveOutfile(options: esbuild.BuildOptions): esbuild.BuildOptions {
 		target: "firefox115",
 		platform: "browser",
 		charset: "utf8",
-		define: defines,
+		define: defines(dev),
 		logLevel: "warning",
 	};
 }
 
-export async function build() {
+export async function build({ dev = false } = {}) {
 	rmSync(buildDir, { recursive: true, force: true });
 	mkdirSync(buildDir, { recursive: true });
 	copyStaticAssets(addonDir);
-	await Promise.all(scriptOptions.map((o) => esbuild.build(resolveOutfile(o))));
+	await Promise.all(
+		scriptOptions.map((o) => esbuild.build(resolveOutfile(o, dev))),
+	);
 }
 
 if (import.meta.filename === process.argv[1]) {
 	const start = Date.now();
-	await build();
+	const dev = process.argv.includes("--dev");
+	await build({ dev });
 	const files: string[] = [];
 	const walk = (d: string) => {
 		for (const e of readdirSync(d, { withFileTypes: true })) {
@@ -87,5 +90,5 @@ if (import.meta.filename === process.argv[1]) {
 		}
 	};
 	walk(buildDir);
-	console.log(`Built in ${Date.now() - start}ms:\n${files.sort().join("\n")}`);
+	console.log(`Built${dev ? " (dev)" : ""} in ${Date.now() - start}ms:\n${files.sort().join("\n")}`);
 }

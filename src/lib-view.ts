@@ -6,6 +6,8 @@
  * the make-it-red example: it proves the stylesheet, Fluent locale and menu
  * wiring all reach the main window. Replace addToWindow() with the cover grid.
  */
+import { registerReloadEndpoint, unregisterReloadEndpoint } from "./dev-reload.ts";
+
 export class LibViewPlugin {
 	id: string | null = null;
 	version: string | null = null;
@@ -32,7 +34,7 @@ export class LibViewPlugin {
 		link.id = `${__ADDON_REF__}-stylesheet`;
 		link.type = "text/css";
 		link.rel = "stylesheet";
-		link.href = `${this.rootURI}style.css`;
+		link.href = `${this.rootURI}style.css?v=${Date.now()}`;
 		doc.documentElement.appendChild(link);
 		this.storeAddedElement(link);
 
@@ -86,7 +88,13 @@ export class LibViewPlugin {
 		);
 	}
 
+	shutdown() {
+		if (__DEV__) unregisterReloadEndpoint();
+		this.removeFromAllWindows();
+	}
+
 	async main() {
+		if (__DEV__) registerReloadEndpoint((msg) => this.log(msg));
 		const columns = Zotero.Prefs.get(`${__PREFS_PREFIX__}.columns`, true);
 		this.log(`Grid ready — columns: ${columns}`);
 	}

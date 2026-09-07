@@ -29,7 +29,12 @@ async function startup({ id, version, rootURI }: BootstrapData) {
 		scripts: [`${rootURI}preferences.js`],
 	});
 
-	Services.scriptloader.loadSubScript(`${rootURI}${__ADDON_REF__}.js`);
+	// ignoreCache so a reload picks up the rebuilt bundle instead of the copy
+	// the subscript loader cached on the previous startup.
+	(Services.scriptloader as any).loadSubScriptWithOptions(
+		`${rootURI}${__ADDON_REF__}.js`,
+		{ ignoreCache: true },
+	);
 	LibView!.init({ id, version, rootURI });
 	LibView!.addToAllWindows();
 	await LibView!.main();
@@ -45,7 +50,7 @@ function onMainWindowUnload({ window }: { window: Window }) {
 
 function shutdown() {
 	log("Shutting down");
-	LibView?.removeFromAllWindows();
+	LibView?.shutdown();
 	LibView = undefined;
 }
 

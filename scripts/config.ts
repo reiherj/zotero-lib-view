@@ -30,13 +30,22 @@ export const substitutions: Record<string, string> = {
 };
 
 /** Constants injected into TypeScript sources by esbuild. */
-export const defines: Record<string, string> = {
-	__ADDON_ID__: JSON.stringify(addon.id),
-	__ADDON_NAME__: JSON.stringify(addon.name),
-	__ADDON_REF__: JSON.stringify(addon.ref),
-	__ADDON_VERSION__: JSON.stringify(addon.version),
-	__PREFS_PREFIX__: JSON.stringify(addon.prefsPrefix),
-};
+export function defines(dev: boolean): Record<string, string> {
+	return {
+		__ADDON_ID__: JSON.stringify(addon.id),
+		__ADDON_NAME__: JSON.stringify(addon.name),
+		__ADDON_REF__: JSON.stringify(addon.ref),
+		__ADDON_VERSION__: JSON.stringify(addon.version),
+		__PREFS_PREFIX__: JSON.stringify(addon.prefsPrefix),
+		// esbuild drops `if (false)` branches, so the reload endpoint and its
+		// imports disappear entirely from a production build.
+		__DEV__: JSON.stringify(dev),
+	};
+}
+
+/** Zotero's built-in HTTP server, which hosts the dev reload endpoint. */
+export const zoteroPort = Number(process.env.ZOTERO_PORT ?? 23119);
+export const reloadURL = `http://127.0.0.1:${zoteroPort}/${addon.ref}/reload`;
 
 export const zoteroBin =
 	process.env.ZOTERO_BIN ?? "/Applications/Zotero.app/Contents/MacOS/zotero";

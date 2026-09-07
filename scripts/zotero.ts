@@ -25,7 +25,7 @@ export async function stop() {
 	} catch {
 		// Zotero may not be scriptable if it is mid-launch; fall through to SIGTERM.
 	}
-	for (let i = 0; i < 40; i++) {
+	for (let i = 0; i < 60; i++) {
 		if (!isRunning()) return;
 		await sleep(500);
 	}
@@ -46,7 +46,11 @@ export function start() {
 	// -purgecaches forces Zotero to re-read the plugin's files rather than
 	// serving the previous build from its startup cache.
 	const out = openSync(logFile, "a");
-	const child = spawn(zoteroBin, ["-purgecaches", "-ZoteroDebugText", "-jsconsole"], {
+	// -jsconsole opens the Browser Console, which is noisy and can stall the
+	// AppleScript quit; opt in with ZOTERO_JSCONSOLE=1 when you need it.
+	const args = ["-purgecaches", "-ZoteroDebugText"];
+	if (process.env.ZOTERO_JSCONSOLE) args.push("-jsconsole");
+	const child = spawn(zoteroBin, args, {
 		detached: true,
 		stdio: ["ignore", out, out],
 	});
