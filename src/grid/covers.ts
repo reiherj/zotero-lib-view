@@ -69,8 +69,12 @@ const renderDocuments = new WeakMap<Window, Promise<Document>>();
 /**
  * pdf.js appends SVG filter elements to `document.body` when a page uses a soft
  * mask. The Zotero pane is a XUL document with no body, so rendering there
- * throws and those covers silently fall back to a placeholder. A hidden
- * about:blank iframe gives pdf.js a document that has one.
+ * throws and those covers silently fall back to a placeholder. An iframe gives
+ * pdf.js a document that has one.
+ *
+ * It loads render.html rather than about:blank because an about:blank frame in
+ * a chrome window is system privileged, and Gecko will not resolve the SVG
+ * filter references pdf.js uses for soft masks in such a document.
  */
 const renderDocument = (context: CoverContext): Promise<Document> => {
 	let promise = renderDocuments.get(context.window);
@@ -82,7 +86,7 @@ const renderDocument = (context: CoverContext): Promise<Document> => {
 			"iframe",
 		) as HTMLIFrameElement;
 		iframe.id = `${__ADDON_REF__}-render-frame`;
-		iframe.setAttribute("src", "about:blank");
+		iframe.setAttribute("src", `${context.rootURI}render.html`);
 		iframe.style.cssText =
 			"position:absolute;width:0;height:0;border:0;visibility:hidden";
 
@@ -99,9 +103,9 @@ const renderDocument = (context: CoverContext): Promise<Document> => {
 		};
 
 		context.window.document.documentElement.appendChild(iframe);
-		// An about:blank iframe in a XUL document is usable as soon as it is in
-		// the tree and does not reliably fire `load`. Waiting on that event alone
-		// hangs forever. Check first, and keep the listener only as a fallback.
+		// The frame can already be usable when it lands in the tree, and it does
+		// not reliably fire `load`. Waiting on that event alone hangs forever, so
+		// check first and keep the listener only as a fallback.
 		if (!ready()) {
 			iframe.addEventListener("load", () => ready(), { once: true });
 		}

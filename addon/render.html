@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<!--
+  Offscreen document that pdf.js renders into. It exists because an about:blank
+  iframe inside Zotero's chrome window is system privileged, and Gecko refuses
+  to resolve the SVG filter references pdf.js uses for soft masks there. Loading
+  a real file gives the frame an ordinary content document where they resolve.
+-->
+<html>
+	<head>
+		<meta charset="utf-8" />
+		<title>lib-view render surface</title>
+	</head>
+	<body></body>
+</html>
