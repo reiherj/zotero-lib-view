@@ -52,7 +52,7 @@ export class GridView {
 		this.toggle.className = "zotero-tb-button";
 		this.toggle.setAttribute("type", "checkbox");
 		this.toggle.setAttribute("tabindex", "-1");
-		this.toggle.setAttribute("data-l10n-id", `${__ADDON_REF__}-toggle`);
+		this.toggle.setAttribute("data-l10n-id", `${__ADDON_REF__}-toggle-button`);
 		this.toggle.addEventListener("command", () => {
 			this.window.dispatchEvent(
 				new this.window.CustomEvent(`${__ADDON_REF__}:toggle`, {

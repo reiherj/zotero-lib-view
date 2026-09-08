@@ -59,7 +59,7 @@ export class LibViewPlugin {
 		const menuitem = (doc as any).createXULElement("menuitem");
 		menuitem.id = `${__ADDON_REF__}-view-menuitem`;
 		menuitem.setAttribute("type", "checkbox");
-		menuitem.setAttribute("data-l10n-id", `${__ADDON_REF__}-toggle`);
+		menuitem.setAttribute("data-l10n-id", `${__ADDON_REF__}-toggle-menuitem`);
 		menuitem.checked = this.gridEnabled;
 		menuitem.addEventListener("command", () => {
 			this.setGridEnabled(menuitem.checked);
