@@ -7,6 +7,16 @@
 	position: relative;
 }
 
+/*
+ * The tree is hidden while the grid is up, but only visually. It keeps its box
+ * and keeps re-rendering rows, so Zotero goes on owning sort, filter, search
+ * and selection. Without this the selected row paints on top of the overlay and
+ * the list selection shows up as a blue band across the covers.
+ */
+#zotero-items-pane[data-__addonRef__-active] #zotero-items-tree {
+	opacity: 0;
+}
+
 #__addonRef__-grid {
 	display: none;
 }
