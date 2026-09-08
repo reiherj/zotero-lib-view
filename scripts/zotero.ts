@@ -46,10 +46,12 @@ export const start = () => {
 	// -purgecaches forces Zotero to re-read the plugin's files rather than
 	// serving the previous build from its startup cache.
 	const out = openSync(logFile, "a");
-	// -jsconsole opens the Browser Console, which is noisy and can stall the
-	// AppleScript quit. Opt in with ZOTERO_JSCONSOLE=1 when you need it.
+	// -jsconsole opens the Browser Console and -jsdebugger opens the Browser
+	// Toolbox, which is where the DOM inspector lives. Both are noisy and can
+	// stall the AppleScript quit, so opt in only when you need them.
 	const args = ["-purgecaches", "-ZoteroDebugText"];
 	if (process.env.ZOTERO_JSCONSOLE) args.push("-jsconsole");
+	if (process.env.ZOTERO_JSDEBUGGER) args.push("-jsdebugger");
 	const child = spawn(zoteroBin, args, {
 		detached: true,
 		stdio: ["ignore", out, out],
