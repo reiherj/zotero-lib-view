@@ -7,7 +7,7 @@ const REFRESH_DEBOUNCE_MS = 120;
  * The grid for one main window.
  *
  * The grid is an overlay on `#zotero-items-pane` rather than a replacement for
- * the item tree. The tree stays in the DOM, laid out and updating underneath —
+ * the item tree. The tree stays in the DOM, laid out and updating underneath,
  * which means Zotero keeps owning sorting, filtering, the quick search and the
  * selection, and this class only has to mirror the result. It also gives us a
  * dependency-free way to know when anything changed: a MutationObserver on the

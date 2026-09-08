@@ -2,12 +2,12 @@
  * Cover resolution.
  *
  * Zotero has no cover field, so a cover has to be derived from what the item
- * already carries. Providers are tried in order; the first hit wins and an item
+ * already carries. Providers are tried in order. The first hit wins and an item
  * with no hit gets a generated placeholder. Adding a source (a remote lookup by
  * ISBN, say) means adding one function to `PROVIDERS`.
  *
  * Results are cached in memory and, for rendered PDF pages, on disk under the
- * Zotero data directory — rendering a page is far too slow to repeat on every
+ * Zotero data directory. Rendering a page is far too slow to repeat on every
  * scroll, let alone every restart.
  */
 const IMAGE_CONTENT_TYPES = new Set([
@@ -23,7 +23,7 @@ const PDF_RENDER_WIDTH = 400;
 const PDF_JPEG_QUALITY = 0.82;
 
 export interface CoverContext {
-	/** A window is needed for its canvas and for pdf.js; the sandbox has no DOM. */
+	/** A window is needed for its canvas and for pdf.js. The sandbox has no DOM. */
 	window: Window;
 	rootURI: string;
 }
@@ -31,38 +31,38 @@ export interface CoverContext {
 /** Resolved covers, keyed by item id. `null` means "checked, nothing found". */
 const cache = new Map<number, string | null>();
 
-function cacheDir(): string {
+const cacheDir = (): string => {
 	return PathUtils.join((Zotero as any).DataDirectory.dir, __ADDON_REF__, "covers");
-}
+};
 
-function cachePath(itemID: number): string {
+const cachePath = (itemID: number): string => {
 	return PathUtils.join(cacheDir(), `${itemID}.jpg`);
-}
+};
 
-function attachmentsOf(item: any): any[] {
+const attachmentsOf = (item: any): any[] => {
 	return Zotero.Items.get(item.getAttachments()) as unknown as any[];
-}
+};
 
-async function fileURLIfImage(attachment: any): Promise<string | null> {
+const fileURLIfImage = async (attachment: any): Promise<string | null> => {
 	if (!IMAGE_CONTENT_TYPES.has(attachment.attachmentContentType)) return null;
 	const path = await attachment.getFilePathAsync();
 	return path ? PathUtils.toFileURI(path) : null;
-}
+};
 
 /** The item is itself an image attachment. */
-async function ownFile(item: any): Promise<string | null> {
+const ownFile = async (item: any): Promise<string | null> => {
 	return item.isAttachment() ? fileURLIfImage(item) : null;
-}
+};
 
-/** An image attached to the item — a cover the user saved themselves. */
-async function attachedImage(item: any): Promise<string | null> {
+/** An image attached to the item, a cover the user saved themselves. */
+const attachedImage = async (item: any): Promise<string | null> => {
 	if (!item.isRegularItem()) return null;
 	for (const attachment of attachmentsOf(item)) {
 		const url = await fileURLIfImage(attachment);
 		if (url) return url;
 	}
 	return null;
-}
+};
 
 const renderDocuments = new WeakMap<Window, Promise<Document>>();
 
@@ -72,7 +72,7 @@ const renderDocuments = new WeakMap<Window, Promise<Document>>();
  * throws and those covers silently fall back to a placeholder. A hidden
  * about:blank iframe gives pdf.js a document that has one.
  */
-function renderDocument(context: CoverContext): Promise<Document> {
+const renderDocument = (context: CoverContext): Promise<Document> => {
 	let promise = renderDocuments.get(context.window);
 	if (promise) return promise;
 
@@ -100,7 +100,7 @@ function renderDocument(context: CoverContext): Promise<Document> {
 
 		context.window.document.documentElement.appendChild(iframe);
 		// An about:blank iframe in a XUL document is usable as soon as it is in
-		// the tree and does not reliably fire `load`; waiting on that event alone
+		// the tree and does not reliably fire `load`. Waiting on that event alone
 		// hangs forever. Check first, and keep the listener only as a fallback.
 		if (!ready()) {
 			iframe.addEventListener("load", () => ready(), { once: true });
@@ -108,7 +108,7 @@ function renderDocument(context: CoverContext): Promise<Document> {
 	});
 	renderDocuments.set(context.window, promise);
 	return promise;
-}
+};
 
 const PDFJS_GLOBAL = `${__ADDON_REF__}_pdfjs`;
 const pdfjsPromises = new WeakMap<Window, Promise<any>>();
@@ -118,7 +118,7 @@ const pdfjsPromises = new WeakMap<Window, Promise<any>>();
  * It cannot be imported into the plugin sandbox: the browser build reads
  * `window` and `navigator` at import time and neither exists there.
  */
-function loadPdfjs(context: CoverContext): Promise<any> {
+const loadPdfjs = (context: CoverContext): Promise<any> => {
 	const window = context.window as any;
 	if (window[PDFJS_GLOBAL]) return Promise.resolve(window[PDFJS_GLOBAL]);
 
@@ -152,9 +152,9 @@ function loadPdfjs(context: CoverContext): Promise<any> {
 	});
 	pdfjsPromises.set(context.window, promise);
 	return promise;
-}
+};
 
-async function readDiskCache(itemID: number): Promise<string | null> {
+const readDiskCache = async (itemID: number): Promise<string | null> => {
 	try {
 		const bytes = await IOUtils.read(cachePath(itemID));
 		let binary = "";
@@ -163,9 +163,9 @@ async function readDiskCache(itemID: number): Promise<string | null> {
 	} catch {
 		return null;
 	}
-}
+};
 
-async function writeDiskCache(itemID: number, dataURL: string) {
+const writeDiskCache = async (itemID: number, dataURL: string) => {
 	try {
 		await IOUtils.makeDirectory(cacheDir(), { createAncestors: true });
 		const base64 = dataURL.slice(dataURL.indexOf(",") + 1);
@@ -176,10 +176,10 @@ async function writeDiskCache(itemID: number, dataURL: string) {
 	} catch (e) {
 		Zotero.logError(e as Error);
 	}
-}
+};
 
 /** First page of the item's PDF attachment, rendered to a JPEG data URL. */
-async function pdfFirstPage(item: any, context: CoverContext): Promise<string | null> {
+const pdfFirstPage = async (item: any, context: CoverContext): Promise<string | null> => {
 	if (!item.isRegularItem()) return null;
 
 	const cached = await readDiskCache(item.id);
@@ -218,17 +218,17 @@ async function pdfFirstPage(item: any, context: CoverContext): Promise<string | 
 	} finally {
 		document.destroy();
 	}
-}
+};
 
 const PROVIDERS = [ownFile, attachedImage, pdfFirstPage];
 
 /** Resolutions in progress, so the same PDF is never rendered twice at once. */
 const inFlight = new Map<number, Promise<string | null>>();
 
-export function resolveCover(
+export const resolveCover = (
 	item: any,
 	context: CoverContext,
-): Promise<string | null> {
+): Promise<string | null> => {
 	if (cache.has(item.id)) return Promise.resolve(cache.get(item.id)!);
 
 	const existing = inFlight.get(item.id);
@@ -251,54 +251,54 @@ export function resolveCover(
 
 	inFlight.set(item.id, promise);
 	return promise;
-}
+};
 
 /** Already-resolved cover, if any, without awaiting. Used to avoid a flash. */
-export function cachedCover(itemID: number): string | null | undefined {
+export const cachedCover = (itemID: number): string | null | undefined => {
 	return cache.get(itemID);
-}
+};
 
 /** Drop the per-window pdf.js bridge and render frame. */
-export function disposeWindow(window: Window) {
+export const disposeWindow = (window: Window) => {
 	renderDocuments.delete(window);
 	pdfjsPromises.delete(window);
 	for (const id of [`${__ADDON_REF__}-render-frame`, `${__ADDON_REF__}-pdf-bridge`]) {
 		window.document.getElementById(id)?.remove();
 	}
 	delete (window as any)[PDFJS_GLOBAL];
-}
+};
 
-export function forgetCover(itemID: number) {
+export const forgetCover = (itemID: number) => {
 	cache.delete(itemID);
 	IOUtils.remove(cachePath(itemID), { ignoreAbsent: true }).catch(() => {});
-}
+};
 
 /**
  * Only attachment changes can change an item's cover. Without this filter every
- * unrelated edit — adding a tag, say — would throw away a rendered cover and
+ * unrelated edit, like adding a tag, would throw away a rendered cover and
  * force a re-render of the PDF.
  */
-export function forgetCoversFor(ids: (number | string)[]) {
+export const forgetCoversFor = (ids: (number | string)[]) => {
 	for (const id of ids) {
 		const item = Zotero.Items.get(Number(id)) as any;
 		if (!item?.isAttachment?.()) continue;
 		forgetCover(item.parentItemID ?? item.id);
 	}
-}
+};
 
-export function clearCovers() {
+export const clearCovers = () => {
 	cache.clear();
-}
+};
 
 /**
  * A stable hue per item, so placeholder tiles are distinguishable and don't
  * change as the library is re-sorted.
  */
-export function placeholderHue(item: any): number {
+export const placeholderHue = (item: any): number => {
 	const seed = item.getDisplayTitle?.() ?? String(item.id);
 	let hash = 0;
 	for (let i = 0; i < seed.length; i++) {
 		hash = (hash * 31 + seed.charCodeAt(i)) | 0;
 	}
 	return Math.abs(hash) % 360;
-}
+};

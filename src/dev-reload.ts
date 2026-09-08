@@ -6,15 +6,15 @@
  *
  * `addon.reload()` disables and re-enables the plugin, which runs shutdown()
  * then startup(). Zotero does *not* tear down the bootstrap sandbox on disable,
- * so bootstrap.js itself is never re-read — but startup() re-loads lib-view.js
+ * so bootstrap.js itself is never re-read, but startup() re-loads lib-view.js
  * on every call, so everything bundled there picks up changes. Edits to
- * bootstrap.ts still need a full restart; scripts/dev.ts knows this.
+ * bootstrap.ts still need a full restart, and scripts/dev.ts knows this.
  *
  * The whole module is compiled out of production builds by the __DEV__ define.
  */
 const ENDPOINT_PATH = `/${__ADDON_REF__}/reload`;
 
-export function registerReloadEndpoint(log: (msg: string) => void) {
+export const registerReloadEndpoint = (log: (msg: string) => void) => {
 	const endpoints = (Zotero as any).Server?.Endpoints;
 	if (!endpoints) {
 		log("Zotero.Server unavailable; reload endpoint not registered");
@@ -41,7 +41,7 @@ export function registerReloadEndpoint(log: (msg: string) => void) {
 					await addon.reload();
 				} catch (e) {
 					Zotero.logError(e as Error);
-					// reload() disables before it enables; don't leave it off.
+					// reload() disables before it enables, so don't leave it off.
 					try {
 						await addon.enable();
 					} catch (enableError) {
@@ -56,9 +56,9 @@ export function registerReloadEndpoint(log: (msg: string) => void) {
 
 	const port = Zotero.Prefs.get("httpServer.port") ?? 23119;
 	log(`Reload endpoint: http://127.0.0.1:${port}${ENDPOINT_PATH}`);
-}
+};
 
-export function unregisterReloadEndpoint() {
+export const unregisterReloadEndpoint = () => {
 	const endpoints = (Zotero as any).Server?.Endpoints;
 	if (endpoints) delete endpoints[ENDPOINT_PATH];
-}
+};

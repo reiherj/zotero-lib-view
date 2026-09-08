@@ -21,7 +21,7 @@ const NEEDS_RESTART = new Set([
 
 const pending = new Set<string>();
 
-async function flush() {
+const flush = async () => {
 	const changed = [...pending];
 	pending.clear();
 
@@ -46,7 +46,7 @@ async function flush() {
 		);
 	}
 	await restart();
-}
+};
 
 // Zotero rewrites prefs.js on exit, so it must be closed before we link.
 await stop();
@@ -57,7 +57,7 @@ await restart();
 let timer: NodeJS.Timeout | undefined;
 let running = false;
 
-function schedule(path: string) {
+const schedule = (path: string) => {
 	console.log(`Changed: ${relative(root, path)}`);
 	pending.add(path);
 	clearTimeout(timer);
@@ -70,11 +70,11 @@ function schedule(path: string) {
 			running = false;
 		}
 	}, DEBOUNCE_MS);
-}
+};
 
 for (const dir of [srcDir, addonDir]) {
 	watch(dir, { recursive: true }, (_event, filename) => {
-		// Editors write temp siblings (.!12345!file.ts); ignore anything hidden.
+		// Editors write temp siblings (.!12345!file.ts), so ignore anything hidden.
 		if (filename && !filename.split("/").some((p) => p.startsWith("."))) {
 			schedule(join(dir, filename));
 		}

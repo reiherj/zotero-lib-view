@@ -10,7 +10,7 @@ import { addon, buildDir, zoteroProfileDir } from "./config.ts";
  * so we also drop extensions.lastAppBuildId / lastAppVersion from prefs.js.
  * Zotero must be closed while this runs, or it will overwrite prefs.js on exit.
  */
-export function link() {
+export const link = () => {
 	const profile = zoteroProfileDir();
 
 	const extensionsDir = join(profile, "extensions");
@@ -29,7 +29,7 @@ export function link() {
 		writeFileSync(prefsPath, purged);
 		console.log("Cleared extensions.lastAppBuildId/lastAppVersion to force a rescan");
 	}
-}
+};
 
 if (import.meta.filename === process.argv[1]) {
 	link();

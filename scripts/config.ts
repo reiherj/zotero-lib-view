@@ -30,7 +30,7 @@ export const substitutions: Record<string, string> = {
 };
 
 /** Constants injected into TypeScript sources by esbuild. */
-export function defines(dev: boolean): Record<string, string> {
+export const defines = (dev: boolean): Record<string, string> => {
 	return {
 		__ADDON_ID__: JSON.stringify(addon.id),
 		__ADDON_NAME__: JSON.stringify(addon.name),
@@ -41,7 +41,7 @@ export function defines(dev: boolean): Record<string, string> {
 		// imports disappear entirely from a production build.
 		__DEV__: JSON.stringify(dev),
 	};
-}
+};
 
 /** Zotero's built-in HTTP server, which hosts the dev reload endpoint. */
 export const zoteroPort = Number(process.env.ZOTERO_PORT ?? 23119);
@@ -51,7 +51,7 @@ export const zoteroBin =
 	process.env.ZOTERO_BIN ?? "/Applications/Zotero.app/Contents/MacOS/zotero";
 
 /** Resolve the Zotero profile directory, honouring ZOTERO_PROFILE_DIR. */
-export function zoteroProfileDir(): string {
+export const zoteroProfileDir = (): string => {
 	if (process.env.ZOTERO_PROFILE_DIR) return process.env.ZOTERO_PROFILE_DIR;
 
 	const base = join(homedir(), "Library", "Application Support", "Zotero");
@@ -73,4 +73,4 @@ export function zoteroProfileDir(): string {
 
 	if (!fallback) throw new Error(`No profile found in ${ini}`);
 	return fallback;
-}
+};

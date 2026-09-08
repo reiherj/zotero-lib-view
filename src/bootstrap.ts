@@ -12,9 +12,9 @@
  */
 var LibView: import("./lib-view.ts").LibViewPlugin | undefined;
 
-function log(msg: string) {
+const log = (msg: string) => {
 	Zotero.debug(`${__ADDON_NAME__}: ${msg}`);
-}
+};
 
 function install() {
 	log(`Installed ${__ADDON_VERSION__}`);

@@ -6,7 +6,7 @@ import { addonDir, buildDir, defines, srcDir, substitutions } from "./config.ts"
 const TEXT_EXTENSIONS = new Set([".json", ".js", ".mjs", ".xhtml", ".css", ".ftl", ".dtd", ".properties"]);
 
 /** Copy addon/ into build/, substituting __placeholders__ in text files. */
-function copyStaticAssets(dir: string) {
+const copyStaticAssets = (dir: string) => {
 	for (const entry of readdirSync(dir, { withFileTypes: true })) {
 		const from = join(dir, entry.name);
 		if (entry.isDirectory()) {
@@ -27,7 +27,7 @@ function copyStaticAssets(dir: string) {
 		}
 		writeFileSync(to, text);
 	}
-}
+};
 
 /**
  * bootstrap.ts and preferences.ts are transpiled without bundling so their
@@ -53,7 +53,7 @@ const scriptOptions: esbuild.BuildOptions[] = [
 	},
 ];
 
-function resolveOutfile(options: esbuild.BuildOptions, dev: boolean): esbuild.BuildOptions {
+const resolveOutfile = (options: esbuild.BuildOptions, dev: boolean): esbuild.BuildOptions => {
 	let outfile = options.outfile!;
 	for (const [key, value] of Object.entries(substitutions)) {
 		outfile = outfile.replaceAll(key, value);
@@ -67,16 +67,16 @@ function resolveOutfile(options: esbuild.BuildOptions, dev: boolean): esbuild.Bu
 		define: defines(dev),
 		logLevel: "warning",
 	};
-}
+};
 
-export async function build({ dev = false } = {}) {
+export const build = async ({ dev = false } = {}) => {
 	rmSync(buildDir, { recursive: true, force: true });
 	mkdirSync(buildDir, { recursive: true });
 	copyStaticAssets(addonDir);
 	await Promise.all(
 		scriptOptions.map((o) => esbuild.build(resolveOutfile(o, dev))),
 	);
-}
+};
 
 if (import.meta.filename === process.argv[1]) {
 	const start = Date.now();

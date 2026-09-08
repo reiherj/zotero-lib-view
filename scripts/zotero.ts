@@ -6,24 +6,24 @@ import { root, zoteroBin } from "./config.ts";
 const PROCESS_PATTERN = "Zotero.app/Contents/MacOS/zotero";
 export const logFile = join(root, "zotero.log");
 
-function isRunning(): boolean {
+const isRunning = (): boolean => {
 	try {
 		execFileSync("pgrep", ["-f", PROCESS_PATTERN], { stdio: "ignore" });
 		return true;
 	} catch {
 		return false;
 	}
-}
+};
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-export async function stop() {
+export const stop = async () => {
 	if (!isRunning()) return;
 	console.log("Stopping Zotero…");
 	try {
 		execFileSync("osascript", ["-e", 'tell application "Zotero" to quit'], { stdio: "ignore" });
 	} catch {
-		// Zotero may not be scriptable if it is mid-launch; fall through to SIGTERM.
+		// Zotero may not be scriptable if it is mid-launch. Fall through to SIGTERM.
 	}
 	for (let i = 0; i < 60; i++) {
 		if (!isRunning()) return;
@@ -40,14 +40,14 @@ export async function stop() {
 		await sleep(500);
 	}
 	throw new Error("Could not stop Zotero");
-}
+};
 
-export function start() {
+export const start = () => {
 	// -purgecaches forces Zotero to re-read the plugin's files rather than
 	// serving the previous build from its startup cache.
 	const out = openSync(logFile, "a");
 	// -jsconsole opens the Browser Console, which is noisy and can stall the
-	// AppleScript quit; opt in with ZOTERO_JSCONSOLE=1 when you need it.
+	// AppleScript quit. Opt in with ZOTERO_JSCONSOLE=1 when you need it.
 	const args = ["-purgecaches", "-ZoteroDebugText"];
 	if (process.env.ZOTERO_JSCONSOLE) args.push("-jsconsole");
 	const child = spawn(zoteroBin, args, {
@@ -56,12 +56,12 @@ export function start() {
 	});
 	child.unref();
 	console.log(`Started Zotero (pid ${child.pid}); log: ${logFile}`);
-}
+};
 
-export async function restart() {
+export const restart = async () => {
 	await stop();
 	start();
-}
+};
 
 if (import.meta.filename === process.argv[1]) {
 	const command = process.argv[2] ?? "restart";

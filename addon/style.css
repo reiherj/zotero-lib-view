@@ -52,7 +52,7 @@
 
 /*
  * The slot keeps a uniform 2:3 so rows stay aligned, but the image is only
- * *contained* in it and sits on the baseline — book covers are not all 2:3, and
+ * *contained* in it and sits on the baseline. Book covers are not all 2:3, and
  * object-fit: cover was slicing the edges off the wider ones. The shadow and
  * radius live on the image itself, so a cover with a white background still
  * reads as an object rather than bleeding into the pane.
@@ -96,7 +96,7 @@
 	display: block;
 	border-radius: 3px;
 	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
-	/* Covers resolved from disk fade in; ones already in memory are marked
+	/* Covers resolved from disk fade in. Ones already in memory are marked
 	   loaded up front and paint with the tile. */
 	opacity: 0;
 	transition: opacity 0.18s ease;
