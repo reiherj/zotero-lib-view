@@ -10,7 +10,7 @@ library of books looks like a shelf rather than a list of titles.
 
 - Zotero 7.0 or newer (developed against **9.0.6**)
 - Node.js 20+ (developed against **24.14.1**)
-- macOS. The scripts shell out to `osascript`/`pgrep` to control Zotero; on
+- macOS. The scripts shell out to `osascript`/`pgrep` to control Zotero, so on
   Linux or Windows you'd need to adapt `scripts/zotero.ts`.
 
 ## Quick start
@@ -22,11 +22,11 @@ npm run dev
 
 That builds the plugin, links it into your Zotero profile, launches Zotero, and
 then watches `src/` and `addon/`. Most saves reload the plugin in place in a few
-milliseconds; see [Fast reload](#fast-reload). Zotero's debug output is appended
+milliseconds. See [Fast reload](#fast-reload). Zotero's debug output is appended
 to `zotero.log` in the project root.
 
 Nothing is copied into the profile. `npm run link` writes an **extension proxy
-file** — a text file named after the plugin id whose contents are the absolute
+file**, a text file named after the plugin id whose contents are the absolute
 path to `build/`:
 
 ```
@@ -36,7 +36,7 @@ path to `build/`:
 Zotero only rescans that directory when it believes the application changed, so
 `link` also strips `extensions.lastAppBuildId` and `extensions.lastAppVersion`
 from the profile's `prefs.js`. Zotero must be closed while this happens, or it
-overwrites `prefs.js` on exit — `npm run dev` handles the ordering for you.
+overwrites `prefs.js` on exit, and `npm run dev` handles the ordering for you.
 
 ## Scripts
 
@@ -53,13 +53,13 @@ overwrites `prefs.js` on exit — `npm run dev` handles the ordering for you.
 
 Override the defaults if your setup differs:
 
-- `ZOTERO_BIN` — path to the Zotero binary
+- `ZOTERO_BIN`: path to the Zotero binary
   (default `/Applications/Zotero.app/Contents/MacOS/zotero`)
-- `ZOTERO_PROFILE_DIR` — profile directory (default: the profile marked
+- `ZOTERO_PROFILE_DIR`: profile directory (default is the profile marked
   `Default=1` in `~/Library/Application Support/Zotero/profiles.ini`)
-- `ZOTERO_PORT` — Zotero's HTTP server port (default `23119`)
-- `ZOTERO_JSCONSOLE=1` — also launch the Browser Console. Off by default: the
-  extra window is noisy and can stall the AppleScript quit on restart.
+- `ZOTERO_PORT`: Zotero's HTTP server port (default `23119`)
+- `ZOTERO_JSCONSOLE=1`: also launch the Browser Console. Off by default because
+  the extra window is noisy and can stall the AppleScript quit on restart.
 
 ## Layout
 
@@ -72,13 +72,13 @@ addon/            Static assets copied to build/, with __placeholders__ substitu
   style.css
   locale/en-US/lib-view.ftl
 src/
-  bootstrap.ts    Zotero's entry points — transpiled, never bundled
-  index.ts        Bundle entry; assigns the global bootstrap declares
+  bootstrap.ts    Zotero's entry points, transpiled but never bundled
+  index.ts        Bundle entry, assigns the global bootstrap declares
   lib-view.ts     Plugin lifecycle, windows, toggle state
   grid/grid-view.ts  The grid overlay for one window
   grid/covers.ts     Cover resolution and caching
   dev-reload.ts   Dev-only reload endpoint, compiled out of release builds
-  preferences.ts  Preference pane script — transpiled, never bundled
+  preferences.ts  Preference pane script, transpiled but never bundled
   globals.d.ts    Build-time constants and shared types
 scripts/          Build, link and Zotero-process tooling (run with tsx)
   config.ts       Paths, identity, profile discovery
@@ -87,7 +87,7 @@ scripts/          Build, link and Zotero-process tooling (run with tsx)
   reload.ts       Pokes the reload endpoint
   link.ts         Proxy file + prefs surgery
   zotero.ts       start / stop / restart
-build/            Build output — the plugin Zotero actually loads
+build/            Build output, the plugin Zotero actually loads
 ```
 
 ## How the build works
@@ -106,7 +106,7 @@ The `config` block in `package.json` is the single source of truth:
 ```
 
 It reaches the code two ways. TypeScript sources get esbuild `define`
-constants — `__ADDON_ID__`, `__ADDON_NAME__`, `__ADDON_REF__`,
+constants: `__ADDON_ID__`, `__ADDON_NAME__`, `__ADDON_REF__`,
 `__ADDON_VERSION__`, `__PREFS_PREFIX__`, declared in `src/globals.d.ts`. Static
 files in `addon/` get textual substitution of `__addonID__`-style placeholders,
 which is also how `manifest.json` picks up the version from `package.json`.
@@ -117,14 +117,14 @@ Renaming the plugin means editing `package.json` and nothing else.
 
 `bootstrap.ts` and `preferences.ts` are **transpiled but not bundled**. Zotero
 evaluates them as classic scripts and looks up their top-level declarations
-(`startup`, `shutdown`, `onMainWindowLoad`, …) by name in that scope — an
+(`startup`, `shutdown`, `onMainWindowLoad`, …) by name in that scope, and an
 esbuild IIFE wrapper would hide them. Everything else is bundled into
 `lib-view.js`, which `bootstrap.js` loads with `Services.scriptloader`.
 
 One consequence worth knowing before you touch `bootstrap.ts`: esbuild emits
 `"use strict"`, and `lib-view.js` reaches back to assign the shared `LibView`
 global. Under strict mode that throws `ReferenceError` unless a real `var
-LibView` survives into `build/bootstrap.js` — which is why it is declared in
+LibView` survives into `build/bootstrap.js`, which is why it is declared in
 `bootstrap.ts` rather than in a `.d.ts`. Don't move it.
 
 ### Fast reload
@@ -135,25 +135,25 @@ single-digit milliseconds.
 
 Zotero has no public reload API, so the plugin registers one on Zotero's own
 HTTP server (`http://127.0.0.1:23119/lib-view/reload`, see `src/dev-reload.ts`).
-The handler calls `addon.reload()`, which disables and re-enables the plugin —
+The handler calls `addon.reload()`, which disables and re-enables the plugin,
 running `shutdown()` then `startup()`.
 
 The endpoint exists only in dev builds. `__DEV__` is an esbuild define, so a
 production build reduces the call to `if (false)` and drops the module and its
-import entirely; `npm run build` output contains no trace of it.
+import entirely, and `npm run build` output contains no trace of it.
 
 **What a reload does and does not pick up.** Zotero does not tear down the
-plugin's sandbox scope when a plugin is disabled — `onDisabled` never calls
-`_unloadScope` — so `bootstrap.js` is *not* re-read. But `startup()` re-loads
-`lib-view.js` every time, so everything bundled there is fresh. Two supporting
-details make that reliable: `bootstrap.ts` loads the bundle with
+plugin's sandbox scope when a plugin is disabled, because `onDisabled` never
+calls `_unloadScope`, so `bootstrap.js` is *not* re-read. But `startup()`
+re-loads `lib-view.js` every time, so everything bundled there is fresh. Two
+supporting details make that reliable: `bootstrap.ts` loads the bundle with
 `loadSubScriptWithOptions(..., { ignoreCache: true })` rather than plain
 `loadSubScript`, which would serve the previously cached copy, and the
 stylesheet `<link>` carries a `?v=<timestamp>` cache-buster.
 
 `scripts/dev.ts` therefore falls back to a full restart when `src/bootstrap.ts`,
 `addon/manifest.json` or `addon/prefs.js` changes, and whenever the endpoint is
-unreachable — which is what happens when a build has a startup error and the
+unreachable, which is what happens when a build has a startup error and the
 plugin never re-registers it.
 
 One rough edge worth knowing: `addon.reload()` sets `userDisabled` true and then
@@ -177,11 +177,11 @@ model, and the grid only mirrors `itemsView.getSortedItems()`.
 
 It also solves change detection without touching Zotero internals. A
 MutationObserver on `#zotero-items-tree` fires whenever Zotero re-renders its
-rows — a different collection, a new search, a re-sort, an added item — so the
-grid refreshes off Zotero's own work. Nothing is monkey-patched, and there is
-nothing to restore on shutdown.
+rows, whether that is a different collection, a new search, a re-sort or an
+added item, so the grid refreshes off Zotero's own work. Nothing is
+monkey-patched, and there is nothing to restore on shutdown.
 
-Clicking a tile calls `itemsView.selectItem()` so the item pane follows;
+Clicking a tile calls `itemsView.selectItem()` so the item pane follows, and
 double-clicking calls `ZoteroPane.viewItems()`. Tiles render in chunks of 120
 with an IntersectionObserver sentinel pulling in more on scroll, so a large
 library does not build thousands of nodes up front.
@@ -190,26 +190,26 @@ library does not build thousands of nodes up front.
 
 `src/grid/covers.ts` tries providers in order and takes the first hit:
 
-1. the item is itself an image attachment;
-2. an image attached to the item — a cover the user saved;
-3. the first page of a PDF attachment, rendered with pdf.js.
+1. the item is itself an image attachment
+2. an image attached to the item, a cover the user saved
+3. the first page of a PDF attachment, rendered with pdf.js
 
 Anything with no hit gets a placeholder: the title's first character on a hue
 derived from that title, so tiles stay distinguishable and stable across
 re-sorts. Adding a source (a lookup by ISBN, say) means adding one function to
 `PROVIDERS`.
 
-Renders are deduplicated by item id while in flight — two tiles scrolling into
-view together would otherwise render the same PDF twice and race the cache
+Renders are deduplicated by item id while in flight, because two tiles scrolling
+into view together would otherwise render the same PDF twice and race the cache
 write.
 
 Rendered pages are cached as JPEGs under `<data directory>/lib-view/covers/`,
-keyed by item id — roughly 30KB each, and far too slow to redo on every scroll
-or restart. The cache is dropped only when an *attachment* changes; invalidating
-on every item change would throw covers away when you add a tag.
+keyed by item id. They are roughly 30KB each, and far too slow to redo on every
+scroll or restart. The cache is dropped only when an *attachment* changes.
+Invalidating on every item change would throw covers away when you add a tag.
 
 Two things about pdf.js are worth knowing before touching that code. Zotero
-already ships it, so the plugin borrows it instead of bundling a copy — but it
+already ships it, so the plugin borrows it instead of bundling a copy, but it
 is the **browser** build, and it reads `window` and `navigator` at import time.
 `ChromeUtils.importESModule()` into the plugin sandbox therefore throws
 `ReferenceError: navigator is not defined`. `addon/pdf-bridge.mjs` is injected
@@ -223,7 +223,7 @@ A third: when a page uses a soft mask, pdf.js appends SVG filter elements to
 threw and fell back to placeholders. Rendering happens in a hidden `about:blank`
 iframe, passed to `getDocument()` as `ownerDocument`, which has a real body.
 That iframe is usable as soon as it is in the tree and does not reliably fire
-`load` — waiting on that event alone hangs forever, so the code checks
+`load`. Waiting on that event alone hangs forever, so the code checks
 `contentDocument` first and keeps a timeout.
 
 The cover slot is a fixed 2:3 box, but the image is only *contained* in it and
@@ -235,12 +235,12 @@ slicing the edges off the wider ones.
 Defaults live in `addon/prefs.js` under the `extensions.lib-view` prefix:
 `gridEnabled` (false) and `tileWidth` (150px, exposed in the plugin's
 preference pane). They are read with
-`Zotero.Prefs.get("extensions.lib-view.tileWidth", true)` — the trailing `true`
-means "this is a full pref name, don't prepend `extensions.zotero.`".
+`Zotero.Prefs.get("extensions.lib-view.tileWidth", true)`, where the trailing
+`true` means "this is a full pref name, don't prepend `extensions.zotero.`".
 
-`gridEnabled` is cached in memory on startup rather than re-read per use: a dev
-reload clears and re-applies the plugin's default prefs, so two reads moments
-apart can disagree.
+`gridEnabled` is cached in memory on startup rather than re-read per use,
+because a dev reload clears and re-applies the plugin's default prefs, so two
+reads moments apart can disagree.
 
 ## Gotchas
 
@@ -250,7 +250,7 @@ Zotero fails silently in most of these cases, so they are worth recognising.
 `applications.zotero` in `Extension.sys.mjs` and treats a missing key as a fatal
 manifest error: the plugin is dropped with no entry in `extensions.json` and no
 log line. All three of `id`, `update_url` and `strict_max_version` are
-required — `update_url` is not optional even for a plugin that will never
+required, and `update_url` is not optional even for a plugin that will never
 self-update.
 
 **The plugin loads but is disabled.** Zotero forces `strictCompatibility` on for
@@ -262,8 +262,9 @@ incompatible with Zotero 9.
 `applications.zotero.id` exactly. A mismatch looks identical to the plugin not
 being found at all.
 
-**Changes don't take effect.** Zotero caches plugin files; `scripts/zotero.ts`
-always passes `-purgecaches`. It also passes `-ZoteroDebugText` and `-jsconsole`.
+**Changes don't take effect.** Zotero caches plugin files, so
+`scripts/zotero.ts` always passes `-purgecaches`. It also passes
+`-ZoteroDebugText` and `-jsconsole`.
 
 **`prefs.js` edits get reverted.** Zotero rewrites the file on exit. Close it
 first.
