@@ -114,6 +114,15 @@ const renderDocument = (context: CoverContext): Promise<Document> => {
 	return promise;
 };
 
+/**
+ * pdf.js loads several things over the network rather than bundling them: the
+ * openjpeg wasm for JPEG 2000 images, ICC profiles for tagged colour spaces,
+ * CMaps for CJK text and the standard font data. Zotero ships all of them next
+ * to its reader build, and pdf.js silently renders those cases wrong when it
+ * cannot find them, so point it at Zotero's copies.
+ */
+const PDFJS_BASE = "resource://zotero/reader/pdf/";
+
 const PDFJS_GLOBAL = `${__ADDON_REF__}_pdfjs`;
 const pdfjsPromises = new WeakMap<Window, Promise<any>>();
 
@@ -203,6 +212,11 @@ const pdfFirstPage = async (item: any, context: CoverContext): Promise<string | 
 	const document = await pdfjs.getDocument({
 		data: await IOUtils.read(path),
 		ownerDocument: renderDoc,
+		cMapUrl: `${PDFJS_BASE}web/cmaps/`,
+		cMapPacked: true,
+		standardFontDataUrl: `${PDFJS_BASE}web/standard_fonts/`,
+		wasmUrl: `${PDFJS_BASE}web/wasm/`,
+		iccUrl: `${PDFJS_BASE}web/iccs/`,
 	}).promise;
 	try {
 		const page = await document.getPage(1);
