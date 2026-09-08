@@ -1,4 +1,4 @@
-# Library Grid View
+# Library Grid View for Zotero
 
 A Zotero plugin that shows your library as a grid of covers instead of a list of
 rows. Covers are rendered from the first page of each item's PDF attachment, so
